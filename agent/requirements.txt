@@ -1,0 +1,7 @@
+livekit-agents[silero,turn-detector]>=1.2,<2
+livekit-plugins-noise-cancellation>=0.2,<1
+livekit-api>=1.0
+supabase>=2.4,<3
+python-dotenv>=1.0
+openai>=1.40
+pytest>=8

@@ -1,0 +1,8 @@
+---
+description: Lupitor project rules and security invariants
+alwaysApply: true
+---
+
+Read and follow AGENTS.md at the repository root before making any change. Its "Invariants" section is non-negotiable: never expose the settlement floor to the LLM, never let commit accept an amount, never bypass ResponseGuard, never delete data.
+
+@AGENTS.md
