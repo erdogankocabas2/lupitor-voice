@@ -1,0 +1,11 @@
+{
+  "name": "Lupitor Voice Platform",
+  "forwardPorts": [3000],
+  "portsAttributes": {
+    "3000": {
+      "label": "Lupitor Web Console",
+      "onAutoForward": "openBrowser",
+      "visibility": "public"
+    }
+  }
+}
