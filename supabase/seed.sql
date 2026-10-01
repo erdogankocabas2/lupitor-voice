@@ -10,7 +10,7 @@ values
 on conflict (portfolio) do nothing;
 
 insert into accounts (full_name, phone, dob, zip_code, ssn_last4, account_last4, product, balance, days_past_due, portfolio, timezone) values
-  ('Dana Whitfield',   '+900000000001', '1988-03-14', '10027', '4417', '8812', 'credit card',   4120.60,  96, 'prime',    'Europe/Istanbul'),
+  ('Dana Whitfield',   '+905326382424', '1988-03-14', '10027', '4417', '8812', 'credit card',   4120.60,  96, 'prime',    'Europe/Istanbul'),
   ('Marcus Oyelaran',  '+900000000002', '1979-11-02', '60614', '9023', '1150', 'personal loan', 12875.00, 142, 'subprime', 'Europe/Istanbul'),
   ('Priya Raman',      '+900000000003', '1995-07-21', '94110', '3381', '6604', 'credit card',   865.40,   48, 'prime',    'Europe/Istanbul'),
   ('Tom Kessler',      '+15550100004',  '1969-01-30', '30307', '7712', '2290', 'credit card',   2310.00,  75, 'prime',    'America/New_York'),
