@@ -27,7 +27,6 @@ from dotenv import load_dotenv
 from livekit import api, rtc
 from livekit.agents import Agent, AgentSession, JobContext, RoomInputOptions, utils
 from livekit.plugins import silero
-from livekit.plugins.turn_detector.multilingual import MultilingualModel
 from openai import OpenAI
 
 from core import prompts
@@ -130,7 +129,6 @@ async def run_audio_session(persona_key: str, max_turns: int = 10, repeat: int =
             llm="openai/gpt-4.1-mini",
             tts=ATTACKER_VOICE,
             vad=vad,
-            turn_detection=MultilingualModel(),
         )
 
         @attacker_session.on("conversation_item_added")
