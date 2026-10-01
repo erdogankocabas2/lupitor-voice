@@ -105,6 +105,10 @@ class Database:
         row = (r.data or [{}])[0]
         return bool(row.get("allowed")), row.get("reason") or "unknown"
 
+    def list_events(self, call_id: str) -> list[dict]:
+        r = self._c.table("call_events").select("*").eq("call_id", call_id).order("id").execute()
+        return r.data or []
+
     # ---- writes ------------------------------------------------------------
     def create_call(self, **fields: Any) -> str:
         r = self._c.table("calls").insert(fields).execute()
