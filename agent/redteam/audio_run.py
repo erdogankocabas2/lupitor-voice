@@ -25,7 +25,7 @@ import uuid
 
 from dotenv import load_dotenv
 from livekit import api, rtc
-from livekit.agents import Agent, AgentSession, JobContext, RoomInputOptions
+from livekit.agents import Agent, AgentSession, JobContext, RoomInputOptions, utils
 from livekit.plugins import silero
 from openai import OpenAI
 
@@ -90,7 +90,7 @@ async def run_audio_session(persona_key: str, max_turns: int = 10, repeat: int =
         agent_id=inbound_agent["id"] if inbound_agent else None,
         agent_version_id=version_row["id"] if version_row else None,
         account_id=account.id,
-        direction="simulated",
+        direction="browser",
         source="redteam",
         status="in_progress",
         room_name=room_name,
@@ -106,7 +106,7 @@ async def run_audio_session(persona_key: str, max_turns: int = 10, repeat: int =
             "call_id": call_id,
             "agent_version_id": version_row["id"] if version_row else None,
             "account_id": account.id,
-            "direction": "outbound",
+            "direction": "browser",
             "phone": account.phone,
         }),
     ))
@@ -118,58 +118,51 @@ async def run_audio_session(persona_key: str, max_turns: int = 10, repeat: int =
         .with_grants(api.VideoGrants(room_join=True, room=room_name)) \
         .to_jwt()
 
-    room = rtc.Room()
-    await room.connect(os.environ["LIVEKIT_URL"], token)
+    async with utils.http_context.open():
+        room = rtc.Room()
+        await room.connect(os.environ["LIVEKIT_URL"], token)
 
-    attacker_agent = AttackerVoiceAgent(persona, account)
-    vad = silero.VAD.load()
-    attacker_session = AgentSession(
-        stt="deepgram/nova-3:en",
-        llm="openai/gpt-4.1-mini",
-        tts=ATTACKER_VOICE,
-        vad=vad,
-        preemptive_generation=True,
-    )
-    attacker_task = asyncio.create_task(
-        attacker_session.start(room=room, agent=attacker_agent)
-    )
+        attacker_agent = AttackerVoiceAgent(persona, account)
+        vad = silero.VAD.load()
+        attacker_session = AgentSession(
+            stt="deepgram/nova-3:en",
+            llm="openai/gpt-4.1-mini",
+            tts=ATTACKER_VOICE,
+            vad=vad,
+        )
+        attacker_task = asyncio.create_task(
+            attacker_session.start(room=room, agent=attacker_agent)
+        )
 
-    print(f"✅ Connected to room! 2 Agents are now speaking to each other over live WebRTC audio.")
-    print(f"Streaming dialogue and guard events (Call ID: {call_id})\n")
+        print(f"✅ Connected to room! 2 Agents are now speaking to each other over live WebRTC audio.")
+        print(f"Streaming dialogue and guard events (Call ID: {call_id})\n")
 
-    # Let the voice agents talk
-    turns = 0
-    start_time = time.time()
-    while turns < max_turns and (time.time() - start_time) < 90:
-        await asyncio.sleep(2)
-        # Check call events from database
-        events = db.list_events(call_id)
-        transcript_lines = [e for e in events if e["type"] == "transcript"]
-        if len(transcript_lines) > turns:
-            new_lines = transcript_lines[turns:]
-            for line in new_lines:
-                role = line["payload"].get("role", "unknown")
-                text = line["payload"].get("text", "")
-                icon = "🛡️ Goldman Stanley Agent" if role == "assistant" else f"😈 {persona.title}"
-                print(f"[{time.strftime('%H:%M:%S')}] {icon}: \"{text}\"")
-            turns = len(transcript_lines)
+        # Let the voice agents talk
+        turns = 0
+        start_time = time.time()
+        while turns < max_turns and (time.time() - start_time) < 90:
+            await asyncio.sleep(2)
+            # Check call events from database
+            events = db.list_events(call_id)
+            transcript_lines = [e for e in events if e["type"] == "transcript"]
+            if len(transcript_lines) > turns:
+                new_lines = transcript_lines[turns:]
+                for line in new_lines:
+                    role = line["payload"].get("role", "unknown")
+                    text = line["payload"].get("text", "")
+                    icon = "🛡️ Goldman Stanley Agent" if role == "assistant" else f"😈 {persona.title}"
+                    print(f"[{time.strftime('%H:%M:%S')}] {icon}: \"{text}\"")
+                turns = len(transcript_lines)
 
-        # Check guard blocks
-        guard_blocks = [e for e in events if e["type"] == "guard"]
-        if guard_blocks:
-            latest_guard = guard_blocks[-1]["payload"]
-            # Only print if recently blocked
-            pass
+            # Check if call completed
+            call_status = db._c.table("calls").select("status, outcome").eq("id", call_id).single().execute().data
+            if call_status.get("status") in ("completed", "failed") and turns > 1:
+                print(f"\n[Call Ended with outcome: {call_status.get('outcome')}]")
+                break
 
-        # Check if call completed or escalated
-        call_status = db._c.table("calls").select("status, outcome").eq("id", call_id).single().execute().data
-        if call_status.get("status") in ("completed", "failed"):
-            print(f"\n[Call Ended with outcome: {call_status.get('outcome')}]")
-            break
-
-    attacker_task.cancel()
-    await room.disconnect()
-    await lk_api.aclose()
+        attacker_task.cancel()
+        await room.disconnect()
+        await lk_api.aclose()
 
     print(f"\n🏁 Audio Red-Team Session Finished ({round(time.time() - start_time, 1)}s).")
     print(f"Check results in Web Console: http://localhost:3000/calls/{call_id}")
