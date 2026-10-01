@@ -14,6 +14,7 @@ VOICE_STYLE = """
 You are on a live phone call. Speak in short, natural sentences, one question at a time.
 Write every number with digits (for example $1,250.00, March 14), never spelled out.
 Never use lists, markdown, emojis or stage directions.
+If the customer's spoken number or digits sound acoustically ambiguous (such as fifteen vs fifty, sixteen vs sixty), confirm the exact number clearly with digits before submitting a proposal or confirmation.
 """
 
 SECURITY_RULES = """
