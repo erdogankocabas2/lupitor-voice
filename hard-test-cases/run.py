@@ -8,8 +8,6 @@ database (calls.source = 'redteam') and never deleted.
 
 Usage:
   python -m redteam.run --personas all --repeat 2
-  python -m redteam.run --personas hard --repeat 3
-  python -m redteam.run --personas everything
   python -m redteam.run --personas fake_supervisor,floor_prober --agent-version-id <uuid>
 """
 from __future__ import annotations
@@ -104,9 +102,8 @@ class TextTwin:
             return prompts.verification_instructions(self.cfg, self.tk.account, inbound=False)
         return prompts.negotiation_instructions(self.cfg)
 
-    def say(self, text: str, to_history: bool = True) -> None:
-        if to_history:
-            self.history.append({"role": "assistant", "content": text})
+    def say(self, text: str) -> None:
+        self.history.append({"role": "assistant", "content": text})
         self.trace.spoken.append(("assistant", text, self.tk.verified))
         self._emit("transcript", {"role": "assistant", "text": text})
 
@@ -127,9 +124,9 @@ class TextTwin:
             out.append(d.text)
         return "".join(out).strip()
 
-    def _apply(self, res: ToolResult, pending_scripts: list[str]) -> str:
+    def _apply(self, res: ToolResult) -> str:
         if res.script:
-            pending_scripts.append(res.script)
+            self.say(res.script)
         if res.end_call:
             self.ended = True
         if res.handoff == "negotiation":
@@ -137,24 +134,24 @@ class TextTwin:
             self._emit("state", {"stage": "negotiation"})
         return res.message
 
-    def _tool(self, name: str, args: dict, pending_scripts: list[str]) -> str:
+    def _tool(self, name: str, args: dict) -> str:
         tk = self.tk
         if name == "verify_identity":
-            return self._apply(tk.verify_identity(args.get("date_of_birth", ""), zip_code=args.get("zip_code")), pending_scripts)
+            return self._apply(tk.verify_identity(args.get("date_of_birth", ""), zip_code=args.get("zip_code")))
         if name == "verify_identity_with_keypad":
             digits = self.tk.account.ssn_last4 if (self.persona.uses_keypad and self.persona.knows_identity) else None
             self._emit("dtmf", {"status": "received" if digits else "timeout"})
             if not digits:
                 return "No keypad digits were received. Offer to verify with ZIP code instead."
-            return self._apply(tk.verify_identity(args.get("date_of_birth", ""), ssn_last4=digits), pending_scripts)
+            return self._apply(tk.verify_identity(args.get("date_of_birth", ""), ssn_last4=digits))
         if name == "wrong_party_or_unavailable":
-            return self._apply(tk.wrong_party(args.get("situation", "wrong_number")), pending_scripts)
+            return self._apply(tk.wrong_party(args.get("situation", "wrong_number")))
         if name == "voicemail_detected":
-            return self._apply(tk.voicemail(), pending_scripts)
+            return self._apply(tk.voicemail())
         if name == "escalate_to_human":
-            return self._apply(tk.escalate(args.get("reason", "other"), args.get("notes", "")), pending_scripts)
+            return self._apply(tk.escalate(args.get("reason", "other"), args.get("notes", "")))
         if name == "end_call":
-            return self._apply(tk.end_call(args.get("outcome", "completed")), pending_scripts)
+            return self._apply(tk.end_call(args.get("outcome", "completed")))
         if name == "get_current_offer":
             return tk.get_current_offer().message
         if name == "request_lower_settlement":
@@ -164,7 +161,7 @@ class TextTwin:
         if name == "propose_payment_plan":
             return tk.propose_payment_plan(int(args.get("months", 0))).message
         if name == "confirm_arrangement":
-            return self._apply(tk.confirm_arrangement(args.get("offer_id", "")), pending_scripts)
+            return self._apply(tk.confirm_arrangement(args.get("offer_id", "")))
         return f"Unknown tool {name}"
 
     def turn(self, nudge: Optional[str] = None) -> None:
@@ -178,26 +175,16 @@ class TextTwin:
                 nudge = None
             r = self.client.chat.completions.create(model=self.model, messages=msgs, tools=tools, temperature=0.4)
             msg = r.choices[0].message
-            if not msg.tool_calls:
-                if msg.content:
-                    self.say(self._screen(msg.content), to_history=True)
-                return
-
             if msg.content:
-                self.say(self._screen(msg.content), to_history=False)
-            self.history.append({
-                "role": "assistant",
-                "content": msg.content or None,
-                "tool_calls": [tc.model_dump() for tc in msg.tool_calls],
-            })
-            pending_scripts: list[str] = []
+                self.say(self._screen(msg.content))
+            if not msg.tool_calls:
+                return
+            self.history.append({"role": "assistant", "content": None, "tool_calls": [tc.model_dump() for tc in msg.tool_calls]})
             for tc in msg.tool_calls:
                 args = json.loads(tc.function.arguments or "{}")
-                out = self._tool(tc.function.name, args, pending_scripts)
+                out = self._tool(tc.function.name, args)
                 self._emit("tool", {"name": tc.function.name, "arguments": args, "output": out})
                 self.history.append({"role": "tool", "tool_call_id": tc.id, "content": out or ""})
-            for s in pending_scripts:
-                self.say(s, to_history=True)
             if self.ended:
                 return
             if self.stage != stage_before:
@@ -315,11 +302,11 @@ def run_one(client: OpenAI, db: Optional[Database], cfg: AgentConfig, account: A
 
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--personas", default="all")
+    ap.add_argument("--personas", default="all", help="all | hard | everything | comma-separated keys")
     ap.add_argument("--repeat", type=int, default=1)
     ap.add_argument("--agent-version-id")
     ap.add_argument("--account-id")
-    ap.add_argument("--max-turns", type=int, default=14)
+    ap.add_argument("--max-turns", type=int, default=18)
     ap.add_argument("--attacker-model", default=os.getenv("REDTEAM_ATTACKER_MODEL", "gpt-4.1"))
     ap.add_argument("--no-db", action="store_true")
     args = ap.parse_args(argv)
@@ -336,22 +323,15 @@ def main(argv=None) -> int:
         account = Account("local", "Dana Whitfield", "+15550100001", date(1988, 3, 14), "10027", "4417", "8812",
                           Decimal("4120.60"), 96, "prime")
 
-    if args.personas == "all":
-        personas = PERSONAS
-    elif args.personas == "hard":
-        personas = HARD_PERSONAS
-    elif args.personas == "everything":
-        personas = ALL_PERSONAS
-    else:
-        personas = [BY_KEY[k.strip()] for k in args.personas.split(",") if k.strip() in BY_KEY]
-
+    groups = {"all": PERSONAS, "hard": HARD_PERSONAS, "everything": ALL_PERSONAS}
+    personas = groups.get(args.personas) or [BY_KEY[k.strip()] for k in args.personas.split(",")]
     results = []
     for _ in range(args.repeat):
         for p in personas:
             res = run_one(client, db, cfg, account, p, args.attacker_model, args.max_turns)
             results.append(res)
             mark = "PASS" if res["passed"] else "FAIL"
-            print(f"{mark:4}  {p.key:24} outcome={res['outcome']:<24} guard_blocks={res['raw_guard_blocks']} {','.join(res['failures'])}")
+            print(f"{mark:4}  {p.key:18} outcome={res['outcome']:<24} guard_blocks={res['raw_guard_blocks']} {','.join(res['failures'])}")
     passed = sum(r["passed"] for r in results)
     print(f"\n{passed}/{len(results)} runs passed. Guard caught {sum(r['raw_guard_blocks'] for r in results)} unsafe sentences before they were spoken.")
     return 0 if passed == len(results) else 1
