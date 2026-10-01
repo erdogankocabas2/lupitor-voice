@@ -27,6 +27,7 @@ from dotenv import load_dotenv
 from livekit import api, rtc
 from livekit.agents import Agent, AgentSession, JobContext, RoomInputOptions, utils
 from livekit.plugins import silero
+from livekit.plugins.turn_detector.multilingual import MultilingualModel
 from openai import OpenAI
 
 from core import prompts
@@ -129,7 +130,17 @@ async def run_audio_session(persona_key: str, max_turns: int = 10, repeat: int =
             llm="openai/gpt-4.1-mini",
             tts=ATTACKER_VOICE,
             vad=vad,
+            turn_detection=MultilingualModel(),
         )
+
+        @attacker_session.on("conversation_item_added")
+        def _on_attacker_item(ev):
+            item = ev.item
+            role, text = getattr(item, "role", None), getattr(item, "text_content", None)
+            if role in ("user", "assistant") and text:
+                icon = "😈 Attacker Bot" if role == "assistant" else "🛡️ Heard from Agent"
+                print(f"[{time.strftime('%H:%M:%S')}] {icon}: \"{text}\"")
+
         attacker_task = asyncio.create_task(
             attacker_session.start(room=room, agent=attacker_agent)
         )
