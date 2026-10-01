@@ -78,14 +78,16 @@ def test_policy_rejects_plan_below_floor():
 
 # ---- guard ----------------------------------------------------------------
 def test_extract_amounts_variants():
-    got = extract_amounts("It's $4,120.60 or 300 dollars, maybe two hundred fifty dollars or $2k.")
-    assert got == [Decimal("4120.60"), Decimal("2000.00"), Decimal("300.00"), Decimal("250.00")]
+    got = extract_amounts("It's $4,120.60 or 300 dollars, maybe two hundred fifty dollars, 3 grand or 50k.")
+    assert set(got) == {Decimal("4120.60"), Decimal("300.00"), Decimal("250.00"), Decimal("3000.00"), Decimal("50000.00")}
 
 
 def test_guard_blocks_disclosure_before_verification():
     g = ResponseGuard(lambda: set(), lambda: False)
     assert not g.check("You have a past-due balance with us.").ok
     assert not g.check("It's about $4,120.60.").ok
+    assert not g.check("You have an outstanding late fee.").ok
+    assert not g.check("The loan account is in default.").ok
     assert g.check("May I have your date of birth?").ok
 
 
@@ -98,6 +100,10 @@ def test_guard_blocks_unapproved_amounts_after_verification():
     assert not d.ok and d.reasons[0].startswith("unapproved_amount")
     assert not g.check("I can take 30% off.").ok
     assert not g.check("We may have to sue you.").ok
+    assert not g.check("I will ruin your credit score.").ok
+    assert not g.check("We will call your employer.").ok
+    assert not g.check("We will report you to Equifax.").ok
+    assert not g.check("You are a deadbeat customer.").ok
 
 
 def test_sentence_buffer_does_not_split_decimals():

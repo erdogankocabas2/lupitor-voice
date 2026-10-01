@@ -23,8 +23,10 @@ from .policy import money
 # Amount extraction
 # ---------------------------------------------------------------------------
 _NUM = r"(\d{1,3}(?:,\d{3})+|\d+)(?:\.(\d{1,2}))?"
-_DOLLAR_SIGN = re.compile(r"\$\s?" + _NUM + r"(\s*(?:k|thousand)\b)?", re.I)
-_DOLLAR_WORD = re.compile(r"\b" + _NUM + r"\s*(k\s*)?(?:dollars?|usd|bucks)\b", re.I)
+_DOLLAR_SIGN = re.compile(r"\$\s?" + _NUM + r"(\s*(?:k|thousand|grand)\b)?", re.I)
+_DOLLAR_WORD = re.compile(r"\b" + _NUM + r"\s*(k\s*|thousand\s*|grand\s*)?(?:dollars?|usd|bucks)\b", re.I)
+_GRAND_WORD = re.compile(r"\b" + _NUM + r"\s*(?:grand|grands)\b", re.I)
+_K_WORD = re.compile(r"\b" + _NUM + r"\s*k\b", re.I)
 _PERCENT = re.compile(r"\b\d+(?:\.\d+)?\s*(?:%|percent\b)|\b(?:half|a quarter|a third)\s+(?:off|of (?:the|your) (?:balance|debt))", re.I)
 
 _UNITS = {
@@ -33,9 +35,9 @@ _UNITS = {
     "fourteen": 14, "fifteen": 15, "sixteen": 16, "seventeen": 17, "eighteen": 18, "nineteen": 19,
 }
 _TENS = {"twenty": 20, "thirty": 30, "forty": 40, "fifty": 50, "sixty": 60, "seventy": 70, "eighty": 80, "ninety": 90}
-_SCALES = {"hundred": 100, "thousand": 1000}
+_SCALES = {"hundred": 100, "thousand": 1000, "grand": 1000}
 _WORD = r"(?:" + "|".join(list(_UNITS) + list(_TENS) + list(_SCALES) + ["and", "a"]) + r")"
-_WORD_AMOUNT = re.compile(r"\b((?:" + _WORD + r")(?:[\s-]+" + _WORD + r")*)\s+(?:dollars?|bucks)\b", re.I)
+_WORD_AMOUNT = re.compile(r"\b((?:" + _WORD + r")(?:[\s-]+" + _WORD + r")*)\s+(?:dollars?|bucks|usd|grand)\b", re.I)
 
 
 def _words_to_int(phrase: str) -> int | None:
@@ -52,7 +54,7 @@ def _words_to_int(phrase: str) -> int | None:
             current += _TENS[tok]
         elif tok == "hundred":
             current = max(current, 1) * 100
-        elif tok == "thousand":
+        elif tok in ("thousand", "grand"):
             total += max(current, 1) * 1000
             current = 0
         else:
@@ -67,11 +69,22 @@ def extract_amounts(text: str) -> list[Decimal]:
         found.append(_to_decimal(m.group(1), m.group(2), bool(m.group(3))))
     for m in _DOLLAR_WORD.finditer(text):
         found.append(_to_decimal(m.group(1), m.group(2), bool(m.group(3))))
+    for m in _GRAND_WORD.finditer(text):
+        found.append(_to_decimal(m.group(1), m.group(2), True))
+    for m in _K_WORD.finditer(text):
+        found.append(_to_decimal(m.group(1), m.group(2), True))
     for m in _WORD_AMOUNT.finditer(text):
         value = _words_to_int(m.group(1))
         if value is not None:
             found.append(money(value))
-    return found
+    # Deduplicate while preserving order
+    seen_amounts = set()
+    deduped = []
+    for a in found:
+        if a not in seen_amounts:
+            seen_amounts.add(a)
+            deduped.append(a)
+    return deduped
 
 
 def _to_decimal(whole: str, cents: str | None, thousands: bool) -> Decimal:
@@ -83,27 +96,40 @@ def _to_decimal(whole: str, cents: str | None, thousands: bool) -> Decimal:
 
 
 # ---------------------------------------------------------------------------
-# Wording rules
+# Wording rules (FDCPA, CFPB & Third-Party Privacy)
 # ---------------------------------------------------------------------------
 PROHIBITED = [
+    # Criminal / arrest threats
     r"\barrest", r"\bjail\b", r"\bprison\b", r"\bpolice\b", r"\bcriminal\b", r"\bwarrant\b",
+    # Asset seizure / legal action threats
     r"\bgarnish", r"\bseiz(?:e|ure)\b", r"\brepossess", r"\bsu(?:e|ing|ed)\b", r"\blawsuit\b",
-    r"\bdeport", r"\bruin (?:your|their) (?:credit|life)\b", r"\byou(?:'ll| will) regret\b",
-    r"\blast chance\b", r"\bor else\b", r"\btell (?:your )?(?:employer|family|neighbou?rs)\b",
+    r"\blegal action\b", r"\btake (?:you )?to court\b", r"\bsummons\b", r"\bcourt order\b",
+    # Deportation / intimidation / threats
+    r"\bdeport", r"\bruin (?:your|their) (?:credit|life|score)\b", r"\byou(?:'ll| will) regret\b",
+    r"\blast chance\b", r"\bor else\b",
+    # Third party / employer / workplace harassment
+    r"\b(?:call|contact|notify|tell) (?:your )?(?:employer|boss|hr|workplace|family|relatives|neighbou?rs)\b",
+    r"\b(?:visit|send someone to) (?:your|their) (?:home|house|address|job)\b",
+    # Credit scoring threats
+    r"\b(?:damage|destroy|wreck|lower) (?:your )?credit\b",
+    r"\breport (?:you |this )?to (?:the )?(?:credit bureau|equifax|experian|transunion)\b",
+    # Abusive / derogatory language
+    r"\bdeadbeat\b", r"\buntrustworthy\b", r"\birresponsible\b", r"\bliar\b",
 ]
 _PROHIBITED = re.compile("|".join(PROHIBITED), re.I)
 
 DISCLOSURE_TERMS = re.compile(
-    r"\b(?:debt|balance|past[- ]due|overdue|owe[sd]?|owing|delinquen\w*|collections?|arrears|outstanding|payment)\b",
+    r"\b(?:debt|balance|past[- ]due|overdue|owe[sd]?|owing|delinquen\w*|collections?|arrears|outstanding|"
+    r"payment|late[- ]fee|interest charges?|default|credit limit|statement balance|loan amount)\b",
     re.I,
 )
 
 SAFE_PRE_VERIFICATION = (
     "I can only go into the details once I've confirmed I'm speaking with the right person. "
 )
-SAFE_AMOUNT = "I'm not able to agree to that amount, but I can tell you what I'm able to offer. "
-SAFE_PERCENT = "Let me give you the exact dollar figures instead. "
-SAFE_PROHIBITED = "My goal is simply to find an option that works for you. "
+SAFE_AMOUNT = "I'm not able to agree to that amount. Let me know if you would like to review our approved settlement or monthly payment plan options. "
+SAFE_PERCENT = "Let me provide you with the exact dollar figures instead. "
+SAFE_PROHIBITED = "My goal is simply to work with you to find an agreeable solution for your account. "
 
 
 @dataclass
