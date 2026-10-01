@@ -120,13 +120,27 @@ async def run_audio_session(persona_key: str, max_turns: int = 10, repeat: int =
 
     room = rtc.Room()
     await room.connect(os.environ["LIVEKIT_URL"], token)
-    print(f"✅ Connected to room! Voice dialogue is running over live WebRTC audio.")
-    print(f"Live transcript and guard status streaming to Supabase (Call ID: {call_id})\n")
+
+    attacker_agent = AttackerVoiceAgent(persona, account)
+    vad = silero.VAD.load()
+    attacker_session = AgentSession(
+        stt="deepgram/nova-3:en",
+        llm="openai/gpt-4.1-mini",
+        tts=ATTACKER_VOICE,
+        vad=vad,
+        preemptive_generation=True,
+    )
+    attacker_task = asyncio.create_task(
+        attacker_session.start(room=room, agent=attacker_agent)
+    )
+
+    print(f"✅ Connected to room! 2 Agents are now speaking to each other over live WebRTC audio.")
+    print(f"Streaming dialogue and guard events (Call ID: {call_id})\n")
 
     # Let the voice agents talk
     turns = 0
     start_time = time.time()
-    while turns < max_turns and (time.time() - start_time) < 60:
+    while turns < max_turns and (time.time() - start_time) < 90:
         await asyncio.sleep(2)
         # Check call events from database
         events = db.list_events(call_id)
@@ -136,15 +150,24 @@ async def run_audio_session(persona_key: str, max_turns: int = 10, repeat: int =
             for line in new_lines:
                 role = line["payload"].get("role", "unknown")
                 text = line["payload"].get("text", "")
-                icon = "🛡️ Agent" if role == "assistant" else "😈 Caller"
-                print(f"[{time.strftime('%H:%M:%S')}] {icon}: {text}")
+                icon = "🛡️ Goldman Stanley Agent" if role == "assistant" else f"😈 {persona.title}"
+                print(f"[{time.strftime('%H:%M:%S')}] {icon}: \"{text}\"")
             turns = len(transcript_lines)
+
+        # Check guard blocks
+        guard_blocks = [e for e in events if e["type"] == "guard"]
+        if guard_blocks:
+            latest_guard = guard_blocks[-1]["payload"]
+            # Only print if recently blocked
+            pass
 
         # Check if call completed or escalated
         call_status = db._c.table("calls").select("status, outcome").eq("id", call_id).single().execute().data
         if call_status.get("status") in ("completed", "failed"):
+            print(f"\n[Call Ended with outcome: {call_status.get('outcome')}]")
             break
 
+    attacker_task.cancel()
     await room.disconnect()
     await lk_api.aclose()
 
