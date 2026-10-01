@@ -150,6 +150,10 @@ def readback(offer: Offer, account: Account) -> str:
     )
 
 
+def confirm_number_heard(amount: Decimal) -> str:
+    return f"Just to confirm I heard you correctly, you are proposing a one-time settlement of {fmt(amount)}. Is that correct?"
+
+
 def voicemail(cfg: AgentConfig, account: Account) -> str:
     # Regulation F limited-content message: no mention of a debt.
     return (

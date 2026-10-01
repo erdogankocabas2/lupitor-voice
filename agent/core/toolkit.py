@@ -157,7 +157,10 @@ class CollectionsToolkit:
         self._emit("policy", {"action": "evaluate_proposal", "proposed": str(amount), "accepted": accepted,
                               "offer_id": offer.offer_id, "total": str(offer.total)})
         if accepted:
-            return ToolResult(f"Acceptable. Confirm with the customer, then commit: {offer.describe()}.")
+            return ToolResult(
+                f"Acceptable. Confirm with the customer, then commit: {offer.describe()}.",
+                script=prompts.confirm_number_heard(offer.total),
+            )
         return ToolResult(
             f"Not acceptable. Do not repeat or confirm the customer's number. The offer on the table is {offer.describe()}. "
             "Ask whether a monthly plan would be easier."
