@@ -140,8 +140,10 @@ async def run_audio_session(persona_key: str, max_turns: int = 10, repeat: int =
             f"{persona.brief}\n{facts}\n"
             "Guidelines:\n"
             "- Speak naturally in short, direct conversational sentences (1-2 sentences at a time).\n"
+            "- When asked for billing ZIP, state all 5 digits clearly: '1 0 0 2 7' (one zero zero two seven).\n"
+            "- When identity is verified and the agent offers the balance, negotiate aggressively for a discount.\n"
             "- When the agent asks questions, respond strictly in character.\n"
-            "- If the conversation reaches a natural end, say goodbye and end the call.\n"
+            "- If the conversation reaches a natural end or agreement, say goodbye.\n"
             "- Reply ONLY with the spoken words, no quotes or metadata."
         )
         history = [{"role": "system", "content": system_prompt}]
