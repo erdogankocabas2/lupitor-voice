@@ -92,8 +92,9 @@ class TextTwin:
             return prompts.verification_instructions(self.cfg, self.tk.account, inbound=False)
         return prompts.negotiation_instructions(self.cfg)
 
-    def say(self, text: str) -> None:
-        self.history.append({"role": "assistant", "content": text})
+    def say(self, text: str, to_history: bool = True) -> None:
+        if to_history:
+            self.history.append({"role": "assistant", "content": text})
         self.trace.spoken.append(("assistant", text, self.tk.verified))
         self._emit("transcript", {"role": "assistant", "text": text})
 
@@ -114,9 +115,9 @@ class TextTwin:
             out.append(d.text)
         return "".join(out).strip()
 
-    def _apply(self, res: ToolResult) -> str:
+    def _apply(self, res: ToolResult, pending_scripts: list[str]) -> str:
         if res.script:
-            self.say(res.script)
+            pending_scripts.append(res.script)
         if res.end_call:
             self.ended = True
         if res.handoff == "negotiation":
@@ -124,24 +125,24 @@ class TextTwin:
             self._emit("state", {"stage": "negotiation"})
         return res.message
 
-    def _tool(self, name: str, args: dict) -> str:
+    def _tool(self, name: str, args: dict, pending_scripts: list[str]) -> str:
         tk = self.tk
         if name == "verify_identity":
-            return self._apply(tk.verify_identity(args.get("date_of_birth", ""), zip_code=args.get("zip_code")))
+            return self._apply(tk.verify_identity(args.get("date_of_birth", ""), zip_code=args.get("zip_code")), pending_scripts)
         if name == "verify_identity_with_keypad":
             digits = self.tk.account.ssn_last4 if (self.persona.uses_keypad and self.persona.knows_identity) else None
             self._emit("dtmf", {"status": "received" if digits else "timeout"})
             if not digits:
                 return "No keypad digits were received. Offer to verify with ZIP code instead."
-            return self._apply(tk.verify_identity(args.get("date_of_birth", ""), ssn_last4=digits))
+            return self._apply(tk.verify_identity(args.get("date_of_birth", ""), ssn_last4=digits), pending_scripts)
         if name == "wrong_party_or_unavailable":
-            return self._apply(tk.wrong_party(args.get("situation", "wrong_number")))
+            return self._apply(tk.wrong_party(args.get("situation", "wrong_number")), pending_scripts)
         if name == "voicemail_detected":
-            return self._apply(tk.voicemail())
+            return self._apply(tk.voicemail(), pending_scripts)
         if name == "escalate_to_human":
-            return self._apply(tk.escalate(args.get("reason", "other"), args.get("notes", "")))
+            return self._apply(tk.escalate(args.get("reason", "other"), args.get("notes", "")), pending_scripts)
         if name == "end_call":
-            return self._apply(tk.end_call(args.get("outcome", "completed")))
+            return self._apply(tk.end_call(args.get("outcome", "completed")), pending_scripts)
         if name == "get_current_offer":
             return tk.get_current_offer().message
         if name == "request_lower_settlement":
@@ -151,7 +152,7 @@ class TextTwin:
         if name == "propose_payment_plan":
             return tk.propose_payment_plan(int(args.get("months", 0))).message
         if name == "confirm_arrangement":
-            return self._apply(tk.confirm_arrangement(args.get("offer_id", "")))
+            return self._apply(tk.confirm_arrangement(args.get("offer_id", "")), pending_scripts)
         return f"Unknown tool {name}"
 
     def turn(self, nudge: Optional[str] = None) -> None:
@@ -165,16 +166,26 @@ class TextTwin:
                 nudge = None
             r = self.client.chat.completions.create(model=self.model, messages=msgs, tools=tools, temperature=0.4)
             msg = r.choices[0].message
-            if msg.content:
-                self.say(self._screen(msg.content))
             if not msg.tool_calls:
+                if msg.content:
+                    self.say(self._screen(msg.content), to_history=True)
                 return
-            self.history.append({"role": "assistant", "content": None, "tool_calls": [tc.model_dump() for tc in msg.tool_calls]})
+
+            if msg.content:
+                self.say(self._screen(msg.content), to_history=False)
+            self.history.append({
+                "role": "assistant",
+                "content": msg.content or None,
+                "tool_calls": [tc.model_dump() for tc in msg.tool_calls],
+            })
+            pending_scripts: list[str] = []
             for tc in msg.tool_calls:
                 args = json.loads(tc.function.arguments or "{}")
-                out = self._tool(tc.function.name, args)
+                out = self._tool(tc.function.name, args, pending_scripts)
                 self._emit("tool", {"name": tc.function.name, "arguments": args, "output": out})
                 self.history.append({"role": "tool", "tool_call_id": tc.id, "content": out or ""})
+            for s in pending_scripts:
+                self.say(s, to_history=True)
             if self.ended:
                 return
             if self.stage != stage_before:
