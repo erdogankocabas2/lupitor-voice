@@ -175,9 +175,13 @@ async def entrypoint(ctx: JobContext):
         if final["status"] != "completed":  # dial failure already recorded
             await sink.close()
             return
-        summary = toolkit.summary() if toolkit else {"outcome": "completed"}
+        summary = toolkit.summary() if toolkit else {"outcome": "no_agreement"}
+        outcome = summary.get("outcome")
+        if outcome in (None, "in_progress", "completed"):
+            outcome = "no_agreement" if summary.get("verified") else "caller_hangup"
+            summary["outcome"] = outcome
         fields = dict(status="completed", ended_at=now_iso(), duration_seconds=int(time.monotonic() - started),
-                      outcome=summary.get("outcome"), verified=summary.get("verified"), summary=summary)
+                      outcome=outcome, verified=summary.get("verified"), summary=summary)
         try:
             await _db(db.update_call, call_id, **fields)
             arr = toolkit.result.arrangement if toolkit else None

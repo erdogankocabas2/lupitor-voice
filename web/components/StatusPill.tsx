@@ -6,6 +6,7 @@ const TONE: Record<string, string> = {
   blocked: "bad",
   failed: "bad",
   no_answer: "neutral",
+  timed_out: "neutral",
 };
 
 const TEXT: Record<string, string> = {
@@ -16,6 +17,7 @@ const TEXT: Record<string, string> = {
   blocked: "Blocked by contact rules",
   failed: "Failed",
   no_answer: "No answer",
+  timed_out: "Timed out",
 };
 
 export default function StatusPill({ status }: { status: string }) {

@@ -4,8 +4,23 @@ import { when } from "@/lib/format";
 import type { Agent, AgentVersion } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
+export const revalidate = 0;
+export const fetchCache = "force-no-store";
 
 export default async function AgentsPage() {
+  // Self-healing: mark calls older than 15 minutes that never completed as timed out
+  const fifteenMinutesAgo = new Date(Date.now() - 15 * 60 * 1000).toISOString();
+  await db()
+    .from("calls")
+    .update({
+      status: "failed",
+      outcome: "did_not_connect",
+      ended_at: new Date().toISOString(),
+      summary: { error: "Call timed out before agent connected" },
+    })
+    .in("status", ["queued", "dialing", "in_progress"])
+    .lt("created_at", fifteenMinutesAgo);
+
   const [{ data: agents }, { data: versions }, { data: calls }] = await Promise.all([
     db().from("agents").select("*").is("archived_at", null).order("created_at"),
     db().from("agent_versions").select("id, agent_id, version, traffic_weight"),

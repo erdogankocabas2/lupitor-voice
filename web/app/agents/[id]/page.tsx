@@ -2,11 +2,13 @@ import Link from "next/link";
 import AgentHeader, { loadAgent } from "@/components/AgentHeader";
 import DialPanel from "@/components/DialPanel";
 import StatusPill from "@/components/StatusPill";
-import { duration, label, when } from "@/lib/format";
+import { duration, formatCallFailure, label, when } from "@/lib/format";
 import { db } from "@/lib/supabase";
 import type { Call } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
+export const revalidate = 0;
+export const fetchCache = "force-no-store";
 
 const SOURCES = [
   { key: "all", label: "All" },
@@ -25,6 +27,19 @@ export default async function AgentCallsPage({
   const { id } = await params;
   const { source = "all" } = await searchParams;
   const { agent, versions } = await loadAgent(id);
+
+  // Self-healing: mark calls older than 15 minutes that never completed as timed out
+  const fifteenMinutesAgo = new Date(Date.now() - 15 * 60 * 1000).toISOString();
+  await db()
+    .from("calls")
+    .update({
+      status: "failed",
+      outcome: "did_not_connect",
+      ended_at: new Date().toISOString(),
+      summary: { error: "Call timed out before agent connected" },
+    })
+    .in("status", ["queued", "dialing", "in_progress"])
+    .lt("created_at", fifteenMinutesAgo);
 
   let q = db().from("calls").select("*").eq("agent_id", id).order("created_at", { ascending: false }).limit(200);
   if (source !== "all") q = q.eq("source", source);
@@ -75,7 +90,19 @@ export default async function AgentCallsPage({
                       <td>{label(c.direction)}{c.summary?.persona ? <div className="muted small">{label(String(c.summary.persona))}</div> : null}</td>
                       <td className="num">{c.agent_version_id ? `v${versionNo.get(c.agent_version_id)}` : ""}</td>
                       <td><StatusPill status={c.status} /></td>
-                      <td>{label(c.outcome ?? c.blocked_reason)}</td>
+                      <td>
+                        {(() => {
+                          const fail = c.status === "failed" ? formatCallFailure(c.summary) : null;
+                          if (fail) {
+                            return (
+                              <span className="pill bad" style={{ fontSize: 11 }} title={fail.detail}>
+                                {fail.short}
+                              </span>
+                            );
+                          }
+                          return label(c.outcome ?? c.blocked_reason);
+                        })()}
+                      </td>
                       <td className="num">{duration(c.duration_seconds)}</td>
                     </tr>
                   ))}

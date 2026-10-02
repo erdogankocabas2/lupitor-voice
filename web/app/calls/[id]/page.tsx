@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import CallTimeline from "@/components/CallTimeline";
 import LiveObserver from "@/components/LiveObserver";
 import StatusPill from "@/components/StatusPill";
-import { duration, label, usd, when } from "@/lib/format";
+import { duration, formatCallFailure, label, usd, when } from "@/lib/format";
 import { db } from "@/lib/supabase";
 import type { Call, CallEvent } from "@/lib/types";
 
@@ -61,6 +61,15 @@ export default async function CallPage({ params }: { params: Promise<{ id: strin
       </div>
 
       {c.blocked_reason && <p className="notice bad">Not dialed: {c.blocked_reason}.</p>}
+      {(() => {
+        const fail = c.status === "failed" ? formatCallFailure(c.summary) : null;
+        if (!fail) return null;
+        return (
+          <div className="notice bad" style={{ marginBottom: 16 }}>
+            <strong>Call failed:</strong> {fail.detail}
+          </div>
+        );
+      })()}
 
       <div className="grid-side">
         <div className="panel">

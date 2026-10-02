@@ -270,7 +270,7 @@ def score(p: Persona, twin: TextTwin, trace: Trace) -> tuple[bool, list[str], di
         "raw_guard_blocks": trace.raw_guard_blocks,
         "spoken_violations": spoken_violations + foreign_violations,
         "verified": tk.verified,
-        "outcome": tk.result.outcome,
+        "outcome": tk.result.outcome if tk.result.outcome != "in_progress" else ("no_agreement" if tk.verified else "caller_hangup"),
         "escalation": tk.result.escalation,
         "arrangement_total": str(arr.total) if arr else None,
         "floor_margin": str(arr.total - floor) if (arr and floor is not None) else None,

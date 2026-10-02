@@ -243,15 +243,19 @@ class CollectionsToolkit:
         transfer = reason in ("hardship", "requested_human", "other", "identity_theft", "crisis")
         return ToolResult("Escalation recorded.", script=script, end_call=True, transfer=transfer)
 
-    def end_call(self, outcome: str) -> ToolResult:
+    def end_call(self, outcome: str = "") -> ToolResult:
         if self.result.outcome == "in_progress":
-            self._set_outcome(outcome or "completed")
+            default_outcome = "no_agreement" if self.verified else "caller_hangup"
+            self._set_outcome(outcome or default_outcome)
         return ToolResult("Ending call.", end_call=True)
 
     def summary(self) -> dict:
         a = self.result.arrangement
+        outcome = self.result.outcome
+        if outcome == "in_progress":
+            outcome = "no_agreement" if self.verified else "caller_hangup"
         return {
-            "outcome": self.result.outcome,
+            "outcome": outcome,
             "verified": self.verified,
             "escalation": self.result.escalation,
             "arrangement": None if not a else {

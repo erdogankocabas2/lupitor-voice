@@ -3,6 +3,8 @@ import { db } from "@/lib/supabase";
 import { label, when } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
+export const revalidate = 0;
+export const fetchCache = "force-no-store";
 
 type Run = {
   id: string; call_id: string | null; agent_version_id: string | null; persona: string; passed: boolean;
