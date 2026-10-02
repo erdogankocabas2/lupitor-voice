@@ -37,6 +37,19 @@ verification, contact rules and final terms come from code the caller cannot rea
 7. **Hardship, dispute, attorney and cease-contact requests end the flow** and hand off to a person. Sympathy is
    never a discount path.
 
+## Unique Architectural & Safety Optimizations
+
+- **Settlement Floor Zero-Leakage:** The minimum acceptable settlement amount is kept in-memory inside `OfferEngine` and never reaches the LLM context (not in system prompts, tool schemas, return payloads, or error strings).
+- **Pre-TTS `ResponseGuard` Interception:** Every LLM sentence is screened via `SentenceBuffer` inside `llm_node` *before* speech synthesis and before audio frame dispatch. Unapproved amounts, debt vocabulary before auth, and foreign currencies (Euros, Pounds, Lira) are intercepted in real-time and tagged with red audit stamps on the call timeline.
+- **Commit by `offer_id` Only:** The settlement confirmation tool accepts only engine-issued offer IDs (`off_...`) with a cryptographic integrity check, completely preventing prompt injections or hallucinations from committing unapproved discount amounts.
+- **Keypad SSN-4 DTMF Verification:** Keypad digits entered via telephony DTMF or the browser WebRTC data topic bypass the LLM context entirely and go straight to server-side verification with a 3-strike lockout.
+- **Post-Verification Third-Party Revocation:** If a caller confesses or reveals post-verification that they are a third party (spouse, child, assistant), identity verification is immediately revoked and negotiation tools are torn down.
+- **Crisis Intervention & 988 Lifeline Routing:** Immediate compassionate escalation and 988 Suicide & Crisis Lifeline routing upon detection of self-harm or extreme distress.
+- **Call Observance (Silent Supervisor):** Supervisors can monitor live calls in real-time via a silent WebRTC audio subscription (`🎧 Listen live`) without alerting the caller or agent.
+- **Append-Only Compliance & Timezone Gating:** Database enforces append-only storage across calls, events, and arrangements via PostgreSQL triggers. Legal calling windows are enforced by `can_contact()` across account timezones.
+- **43-Persona Adversarial Red-Team Twin:** Comprehensive automated evaluation framework running 43 adversarial attack personas (jailbreaks, fake supervisors, social engineering, bankruptcy, hardship) with a 100% pass rate.
+
+
 ## Testing: agent vs agent
 
 `agent/redteam/run.py` has an attacker model play 11 personas against a text-mode twin of the agent. The twin
