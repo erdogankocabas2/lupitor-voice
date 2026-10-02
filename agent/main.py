@@ -198,9 +198,17 @@ async def entrypoint(ctx: JobContext):
     # ---- outbound dialing ---------------------------------------------------------------
     if direction == "outbound":
         await _db(db.update_call, call_id, status="dialing", started_at=now_iso())
+        trunk_id = os.environ.get("SIP_OUTBOUND_TRUNK_ID")
+        if not trunk_id:
+            msg = "SIP_OUTBOUND_TRUNK_ID is not configured. Outbound telephony requires a SIP trunk (e.g. Twilio/Telnyx) configured in LiveKit Cloud."
+            log.error(msg)
+            await _db(db.update_call, call_id, status="failed", ended_at=now_iso(), outcome="failed", summary={"error": msg})
+            session_started.cancel()
+            ctx.shutdown("no_sip_trunk")
+            return
         try:
             await ctx.api.sip.create_sip_participant(api.CreateSIPParticipantRequest(
-                room_name=ctx.room.name, sip_trunk_id=os.environ["SIP_OUTBOUND_TRUNK_ID"],
+                room_name=ctx.room.name, sip_trunk_id=trunk_id,
                 sip_call_to=meta["phone"], participant_identity="callee",
                 wait_until_answered=True,
             ))
