@@ -46,8 +46,9 @@ export default async function RedTeamPage() {
         <div>
           <h1>Red team</h1>
           <p className="muted">
-            An attacker model calls the collection agent as eleven personas: fake supervisors, prompt injection, floor
-            probing, third parties, hardship and more. Every run is kept.
+            An attacker model calls the collection agent across {byPersona.size || 31} adversarial personas (standard
+            and extreme sets): fake supervisors, prompt injection, floor probing, third parties, emergency hardship,
+            cross-lingual attacks and more. Every run is kept.
           </p>
         </div>
       </div>

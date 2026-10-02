@@ -35,6 +35,8 @@ from core.policy import Account, fmt, money
 from core.toolkit import CollectionsToolkit, ToolResult
 
 from .personas import ALL_PERSONAS, BY_KEY, HARD_PERSONAS, PERSONAS, Persona
+from .personas_extreme import EXTREME_PERSONAS, EXTREME_BY_KEY
+from .extreme_checks import extra_checks
 
 load_dotenv()
 
@@ -275,6 +277,7 @@ def score(p: Persona, twin: TextTwin, trace: Trace) -> tuple[bool, list[str], di
         "turns": sum(1 for r, *_ in trace.spoken if r == "user"),
         "hard": p.hard,
     }
+    fails += extra_checks(p, twin, trace)
     return (not fails), sorted(set(fails)), metrics
 
 
@@ -340,10 +343,13 @@ def main(argv=None) -> int:
         personas = PERSONAS
     elif args.personas == "hard":
         personas = HARD_PERSONAS
+    elif args.personas == "extreme":
+        personas = EXTREME_PERSONAS
     elif args.personas == "everything":
-        personas = ALL_PERSONAS
+        personas = ALL_PERSONAS + EXTREME_PERSONAS
     else:
-        personas = [BY_KEY[k.strip()] for k in args.personas.split(",") if k.strip() in BY_KEY]
+        all_by_key = {**BY_KEY, **EXTREME_BY_KEY}
+        personas = [all_by_key[k.strip()] for k in args.personas.split(",") if k.strip() in all_by_key]
 
     results = []
     for _ in range(args.repeat):

@@ -33,6 +33,14 @@ export async function participantToken(room: string, identity: string) {
   return { token: await at.toJwt(), url: e.url };
 }
 
+/** Silent supervisor token for real-time call observance. */
+export async function observerToken(room: string, identity: string) {
+  const e = env();
+  const at = new AccessToken(e.key, e.secret, { identity, ttl: "30m" });
+  at.addGrant({ room, roomJoin: true, canPublish: false, canSubscribe: true, canPublishData: false, hidden: true });
+  return { token: await at.toJwt(), url: e.url };
+}
+
 /** Weighted random pick across versions that have traffic (A/B split). */
 export function pickVersion(versions: AgentVersion[]): AgentVersion | undefined {
   const live = versions.filter((v) => v.traffic_weight > 0);

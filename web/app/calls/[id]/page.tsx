@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import CallTimeline from "@/components/CallTimeline";
+import LiveObserver from "@/components/LiveObserver";
 import StatusPill from "@/components/StatusPill";
 import { duration, label, usd, when } from "@/lib/format";
 import { db } from "@/lib/supabase";
@@ -53,7 +54,10 @@ export default async function CallPage({ params }: { params: Promise<{ id: strin
           <h1>{account?.full_name ?? c.phone ?? "Unknown caller"}</h1>
           <p className="muted">{label(c.direction)} call, {when(c.created_at)}{c.summary?.persona ? `, red-team persona ${label(String(c.summary.persona))}` : ""}</p>
         </div>
-        <StatusPill status={c.status} />
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <LiveObserver callId={c.id} initialStatus={c.status} />
+          <StatusPill status={c.status} />
+        </div>
       </div>
 
       {c.blocked_reason && <p className="notice bad">Not dialed: {c.blocked_reason}.</p>}
