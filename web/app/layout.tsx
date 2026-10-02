@@ -23,6 +23,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               <Link href="/">Agents</Link>
               <Link href="/accounts">Accounts</Link>
               <Link href="/redteam">Red team</Link>
+              <Link href="/audit">Evaluation guide</Link>
             </nav>
             <p className="foot">Call history is append-only. Nothing here can be deleted.</p>
           </aside>
