@@ -187,7 +187,7 @@ class VerificationAgent(GuardedAgent):
     async def greet(self):
         self.state.sink.emit("state", {"stage": "verification"})
         tk = self.state.toolkit
-        if tk.account and self.state.direction == "outbound":
+        if tk.account and self.state.direction != "inbound":
             self.session.say(prompts.greeting_outbound(self.state.cfg, tk.account))
         else:
             self.session.say(prompts.greeting_inbound(self.state.cfg))
