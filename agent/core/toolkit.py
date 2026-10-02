@@ -48,6 +48,7 @@ class CollectionsToolkit:
         find_account: Callable[[str], Optional[Account]],
         emit: Emit,
         today: Optional[date] = None,
+        get_active_arrangement: Optional[Callable[[str], Optional[dict]]] = None,
     ):
         self.cfg = cfg
         self.account = account
@@ -55,6 +56,7 @@ class CollectionsToolkit:
         self._find_account = find_account
         self._emit = emit
         self._today = today
+        self._get_active_arrangement = get_active_arrangement
         self.verifier = Verifier(account) if account else None
         self.engine: Optional[OfferEngine] = None
         self.result = CallOutcome()
@@ -94,6 +96,20 @@ class CollectionsToolkit:
         self._emit("verification", {"step": "verify", "status": res.status, "method": res.method, "attempts_left": res.attempts_left})
         if res.status == "verified":
             self.engine = OfferEngine(self.account, self._load_policy(self.account.portfolio), today=self._today)
+            existing = self._get_active_arrangement(self.account.id) if (self._get_active_arrangement and self.account) else None
+            if existing:
+                script = (
+                    f"Thank you, you're verified. {self.cfg.company} is a creditor and this is an attempt to collect a debt. "
+                    f"Our records show an active payment arrangement is already established for your {self.account.product} "
+                    f"with reference {existing.get('offer_id')}, for a total of {fmt(Decimal(str(existing.get('total'))))}. "
+                    "This existing arrangement is currently active. If you have questions or need to make a payment, "
+                    "I can connect you with a representative."
+                )
+                return ToolResult(
+                    "Customer has an active arrangement already in effect. Advise them and transfer if requested.",
+                    script=script,
+                    handoff="negotiation",
+                )
             return ToolResult(
                 "Identity verified.",
                 script=prompts.disclosure(self.cfg, self.account),
@@ -105,11 +121,15 @@ class CollectionsToolkit:
         if res.status == "invalid_input":
             return ToolResult("Could not understand the details. Ask again for the full date of birth (month, day, year) and the second item.")
         return ToolResult(
-            f"Those details did not match. {res.attempts_left} attempt(s) left. Ask them to repeat both items; "
-            "do not say which one was wrong."
+            f"Those details did not match. {res.attempts_left} attempt(s) left. Read back what you heard to confirm "
+            "(for example: 'I heard ... for the ZIP code, could you please confirm or repeat your date of birth and billing ZIP code?') "
+            "so the customer can correct any mistake, but do not state which item was incorrect."
         )
 
     def wrong_party(self, situation: str) -> ToolResult:
+        if self.verifier:
+            self.verifier.revoke()
+        self.engine = None
         self._set_outcome(situation if situation in ("wrong_number", "not_available", "refused_to_verify") else "wrong_number")
         return ToolResult("Ending call politely.", script=prompts.wrong_party(self.cfg), end_call=True)
 
@@ -179,6 +199,12 @@ class CollectionsToolkit:
     def confirm_arrangement(self, offer_id: str) -> ToolResult:
         if (blocked := self._require_verified()):
             return blocked
+        existing = self._get_active_arrangement(self.account.id) if (self._get_active_arrangement and self.account) else None
+        if existing:
+            return ToolResult(
+                f"An active arrangement (Reference {existing.get('offer_id')}) is already on record for this account. "
+                "Multiple active arrangements are not permitted. Call escalate_to_human(reason='other', notes='Account already has active arrangement')."
+            )
         try:
             offer = self.engine.commit(offer_id.strip().upper())
         except PolicyViolation as e:
@@ -195,14 +221,26 @@ class CollectionsToolkit:
             script=prompts.readback(offer, self.account),
         )
 
+    def revoke_verification(self, reason: str = "caller_is_third_party") -> ToolResult:
+        if self.verifier:
+            self.verifier.revoke()
+        self.engine = None
+        self._emit("verification", {"step": "revoked", "reason": reason})
+        return ToolResult("Verification revoked. You must not disclose debt or negotiate.", handoff="verification")
+
     # ---- escalation & ending ---------------------------------------------------
     def escalate(self, reason: str, notes: str = "") -> ToolResult:
         reason = reason if reason in ESCALATION_REASONS else "other"
+        notes_lower = (notes or "").lower()
+        if any(w in notes_lower for w in ("third party", "third-party", "sister", "brother", "spouse", "husband", "wife", "not the account holder", "not account holder", "impostor", "someone else", "behalf", "relative")):
+            if self.verifier:
+                self.verifier.revoke()
+            self.engine = None
         self.result.escalation = reason
         self._set_outcome(f"escalated_{reason}")
         self._emit("escalation", {"reason": reason, "notes": notes[:500]})
         script = prompts.ESCALATION_SCRIPTS[reason]
-        transfer = reason in ("hardship", "requested_human", "other", "identity_theft")
+        transfer = reason in ("hardship", "requested_human", "other", "identity_theft", "crisis")
         return ToolResult("Escalation recorded.", script=script, end_call=True, transfer=transfer)
 
     def end_call(self, outcome: str) -> ToolResult:

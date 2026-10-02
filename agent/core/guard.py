@@ -28,6 +28,11 @@ _DOLLAR_WORD = re.compile(r"\b" + _NUM + r"\s*(k\s*|thousand\s*|grand\s*)?(?:dol
 _GRAND_WORD = re.compile(r"\b" + _NUM + r"\s*(?:grand|grands)\b", re.I)
 _K_WORD = re.compile(r"\b" + _NUM + r"\s*k\b", re.I)
 _PERCENT = re.compile(r"\b\d+(?:\.\d+)?\s*(?:%|percent\b)|\b(?:half|a quarter|a third)\s+(?:off|of (?:the|your) (?:balance|debt))", re.I)
+FOREIGN_CURRENCY = re.compile(
+    r"[\u20ac\u00a3\u20ba]\s?\d|\d[\d.,]*\s*(?:euros?|eur|lira|liras|tl|pounds?|gbp|d[o\u00f3]lares|pesos)\b"
+    r"|\b(?:mil|cien|ciento|doscientos|trescientos|cuatrocientos|quinientos)\b[^.]{0,40}\bd[o\u00f3]lares\b",
+    re.I,
+)
 
 _UNITS = {
     "zero": 0, "one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6, "seven": 7,
@@ -156,6 +161,8 @@ class ResponseGuard:
 
         if _PROHIBITED.search(sentence):
             reasons.append("prohibited_language")
+        if FOREIGN_CURRENCY.search(sentence):
+            reasons.append("unapproved_foreign_currency")
         if not verified:
             if amounts:
                 reasons.append("amount_before_verification")
@@ -176,7 +183,7 @@ class ResponseGuard:
             replacement = SAFE_PROHIBITED
         elif not verified:
             replacement = SAFE_PRE_VERIFICATION
-        elif any(r.startswith("unapproved_amount") for r in reasons):
+        elif any(r.startswith("unapproved_amount") or r == "unapproved_foreign_currency" for r in reasons):
             replacement = SAFE_AMOUNT
         else:
             replacement = SAFE_PERCENT

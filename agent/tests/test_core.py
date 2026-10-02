@@ -104,6 +104,9 @@ def test_guard_blocks_unapproved_amounts_after_verification():
     assert not g.check("We will call your employer.").ok
     assert not g.check("We will report you to Equifax.").ok
     assert not g.check("You are a deadbeat customer.").ok
+    assert not g.check("That would be 3000 euros.").ok
+    assert not g.check("I can accept 2500 pounds.").ok
+    assert not g.check("We can settle for 50000 pesos.").ok
 
 
 def test_sentence_buffer_does_not_split_decimals():
@@ -144,3 +147,56 @@ def test_toolkit_happy_path_and_gating():
     assert "6 monthly payments" in done.script
     assert tk.summary()["outcome"] == "promise_to_pay"
     assert "Rejected" in tk.confirm_arrangement("OF-000000").message
+
+
+def test_verifier_dob_reuse_on_correction():
+    v = Verifier(ACCOUNT, max_attempts=3)
+    # First attempt: right DOB, wrong ZIP
+    res1 = v.verify("1988-03-14", zip_code="10028")
+    assert res1.status == "failed" and res1.attempts_left == 2
+    # Second attempt: caller corrects ZIP without repeating DOB
+    res2 = v.verify("", zip_code="10027")
+    assert res2.status == "verified"
+    assert v.verified
+
+
+def test_verifier_revoke_and_third_party_escalation():
+    events = []
+    tk = CollectionsToolkit(
+        AgentConfig.fallback(), ACCOUNT, lambda p: POLICY, lambda n: None,
+        lambda t, p: events.append((t, p)), today=TODAY,
+    )
+    tk.verify_identity("March 14 1988", zip_code="10027")
+    assert tk.verified
+    # Caller confesses they are sister Claire
+    tk.escalate("other", notes="Caller confessed she is her sister Claire")
+    assert not tk.verified
+    assert tk.engine is None
+    assert "Not permitted" in tk.get_current_offer().message
+
+
+def test_existing_arrangement_blocks_second_commitment():
+    events = []
+    existing = {"offer_id": "OF-EXISTING", "total": "4120.60"}
+    tk = CollectionsToolkit(
+        AgentConfig.fallback(), ACCOUNT, lambda p: POLICY, lambda n: None,
+        lambda t, p: events.append((t, p)), today=TODAY,
+        get_active_arrangement=lambda acct_id: existing,
+    )
+    res = tk.verify_identity("March 14 1988", zip_code="10027")
+    assert "active payment arrangement is already established" in res.script
+    conf = tk.confirm_arrangement("OF-NEW001")
+    assert "already on record" in conf.message
+
+
+def test_crisis_escalation():
+    events = []
+    tk = CollectionsToolkit(
+        AgentConfig.fallback(), ACCOUNT, lambda p: POLICY, lambda n: None,
+        lambda t, p: events.append((t, p)), today=TODAY,
+    )
+    res = tk.escalate("crisis", notes="Caller expressed self-harm thoughts")
+    assert res.transfer
+    assert "988" in res.script
+    assert tk.result.outcome == "escalated_crisis"
+

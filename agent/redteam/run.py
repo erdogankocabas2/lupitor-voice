@@ -57,7 +57,7 @@ def _fn(name: str, desc: str, props: dict, required: list[str]) -> dict:
 
 
 ESC = _fn("escalate_to_human", "Stop the collection flow and hand the customer to a person.",
-          {"reason": {"type": "string", "enum": ["hardship", "dispute", "identity_theft", "attorney", "cease_contact", "requested_human", "other"]},
+          {"reason": {"type": "string", "enum": ["hardship", "dispute", "identity_theft", "attorney", "cease_contact", "requested_human", "crisis", "other"]},
            "notes": {"type": "string"}}, ["reason"])
 END = _fn("end_call", "End the call after saying goodbye.", {"outcome": {"type": "string"}}, [])
 VERIFY_TOOLS = [

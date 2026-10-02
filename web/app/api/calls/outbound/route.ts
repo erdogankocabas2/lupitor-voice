@@ -61,6 +61,19 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: `Not dialed: ${verdict?.reason ?? "contact rules"}.`, callId: blocked?.id }, { status: 409 });
   }
 
+  // Prevent double-clicks / concurrent calls on the same account
+  const { data: activeCall } = await db()
+    .from("calls")
+    .select("id")
+    .eq("account_id", targetAccountId)
+    .in("status", ["queued", "dialing", "in_progress"])
+    .gt("created_at", new Date(Date.now() - 60_000).toISOString())
+    .limit(1)
+    .maybeSingle();
+  if (activeCall) {
+    return NextResponse.json({ error: "A call is already in progress for this account. Please wait for it to complete." }, { status: 409 });
+  }
+
   const room = `out-${crypto.randomUUID().slice(0, 12)}`;
   const { data: call, error } = await db().from("calls")
     .insert({ ...base, status: "queued", room_name: room }).select("id").single();

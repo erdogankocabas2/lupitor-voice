@@ -55,10 +55,14 @@ class Verifier:
         self._max = max_attempts
         self._failures = 0
         self.verified = False
+        self._last_dob: Optional[date] = None
 
     @property
     def locked(self) -> bool:
         return self._failures >= self._max
+
+    def revoke(self) -> None:
+        self.verified = False
 
     def verify(self, dob_raw: str, zip_code: Optional[str] = None, ssn_last4: Optional[str] = None) -> VerificationResult:
         method = "dob+ssn4_keypad" if ssn_last4 else "dob+zip"
@@ -67,7 +71,14 @@ class Verifier:
         if self.locked:
             return VerificationResult("locked", 0, method)
 
-        dob = parse_dob(dob_raw)
+        if dob_raw and dob_raw.strip():
+            dob = parse_dob(dob_raw)
+            if dob is None:
+                return VerificationResult("invalid_input", self._max - self._failures, method)
+            self._last_dob = dob
+        else:
+            dob = self._last_dob
+
         second = digits(ssn_last4) if ssn_last4 else digits(zip_code)[:5]
         if dob is None or not second:
             # Unparseable input does not burn an attempt, but tells the model to re-ask.

@@ -100,6 +100,16 @@ class Database:
             raise LookupError(f"no offer policy for portfolio {portfolio}")
         return _policy(r.data[0])
 
+    def get_active_arrangement(self, account_id: str) -> Optional[dict]:
+        r = (self._c.table("arrangements").select("*").eq("account_id", account_id)
+             .order("created_at", desc=True).limit(1).execute())
+        return r.data[0] if r.data else None
+
+    def has_active_arrangement(self, account_id: str) -> bool:
+        r = (self._c.table("arrangements").select("id").eq("account_id", account_id)
+             .limit(1).execute())
+        return bool(r.data)
+
     def can_contact(self, account_id: str) -> tuple[bool, str]:
         r = self._c.rpc("can_contact", {"p_account_id": account_id}).execute()
         row = (r.data or [{}])[0]

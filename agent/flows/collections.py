@@ -149,7 +149,7 @@ class GuardedAgent(Agent):
     async def escalate_to_human(
         self,
         context: RunContext,
-        reason: Literal["hardship", "dispute", "identity_theft", "attorney", "cease_contact", "requested_human", "other"],
+        reason: Literal["hardship", "dispute", "identity_theft", "attorney", "cease_contact", "requested_human", "crisis", "other"],
         notes: str = "",
     ):
         """Stop the collection flow and hand the customer to a person.

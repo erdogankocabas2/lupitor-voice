@@ -119,7 +119,8 @@ async def entrypoint(ctx: JobContext):
     greet_now = direction != "outbound"  # outbound greets only after the callee answers
     toolkit: Optional[CollectionsToolkit] = None
     if template == "collections":
-        toolkit = CollectionsToolkit(cfg, account, db.get_policy, db.find_account_by_phone, sink.emit)
+        toolkit = CollectionsToolkit(cfg, account, db.get_policy, db.find_account_by_phone, sink.emit,
+                                     get_active_arrangement=db.get_active_arrangement)
         state = CallState(toolkit=toolkit, cfg=cfg, direction=direction, sink=sink,
                           caller_identity=caller.identity if caller else None)
         agent = VerificationAgent(state, greet=greet_now)

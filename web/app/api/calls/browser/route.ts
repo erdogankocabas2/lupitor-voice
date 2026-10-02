@@ -12,6 +12,20 @@ export async function POST(req: Request) {
   if (!version) return NextResponse.json({ error: "This agent has no saved version." }, { status: 400 });
 
   const room = `test-${crypto.randomUUID().slice(0, 12)}`;
+  if (accountId) {
+    const { data: activeCall } = await db()
+      .from("calls")
+      .select("id")
+      .eq("account_id", accountId)
+      .in("status", ["queued", "in_progress"])
+      .gt("created_at", new Date(Date.now() - 45_000).toISOString())
+      .limit(1)
+      .maybeSingle();
+    if (activeCall) {
+      return NextResponse.json({ error: "A test call is already active for this account. Please wait or end it." }, { status: 409 });
+    }
+  }
+
   const { data: call, error } = await db().from("calls").insert({
     agent_id: agentId, agent_version_id: version.id, account_id: accountId || null,
     direction: "browser", source: "test", status: "queued", room_name: room,
