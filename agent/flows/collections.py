@@ -194,8 +194,9 @@ class VerificationAgent(GuardedAgent):
         Args:
             date_of_birth: Date of birth as YYYY-MM-DD.
         """
-        await context.wait_for_playout()
+        self.state.keypad.start_collecting()
         self.state.sink.emit("dtmf", {"status": "collecting"})
+        await context.wait_for_playout()
         entered = await self.state.keypad.collect(4, timeout=25)
         self.state.sink.emit("dtmf", {"status": "received" if entered else "timeout"})
         if not entered:

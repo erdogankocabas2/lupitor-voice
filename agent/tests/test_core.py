@@ -202,10 +202,16 @@ def test_crisis_escalation():
 
 
 @pytest.mark.anyio
-async def test_keypad_buffer_prebuffered_digits():
+async def test_keypad_buffer_ignores_stray_clicks_before_start():
     from core.keypad import KeypadBuffer
     buf = KeypadBuffer()
-    # User types digits before collect() is called (during speech prompt)
+    # Stray clicks before agent asks for keypad input are ignored
+    buf.push("9")
+    buf.push("9")
+    buf.push("9")
+    
+    # Agent starts asking for code -> buffer activates
+    buf.start_collecting()
     buf.push("4")
     buf.push("4")
     buf.push("1")
@@ -218,10 +224,13 @@ async def test_keypad_buffer_prebuffered_digits():
 async def test_keypad_buffer_multi_digit_push_and_clear():
     from core.keypad import KeypadBuffer
     buf = KeypadBuffer()
+    buf.start_collecting()
     buf.push("9999")
     buf.clear()
+    buf.start_collecting()
     buf.push("4417")
     collected = await buf.collect(4, timeout=1.0)
     assert collected == "4417"
+
 
 

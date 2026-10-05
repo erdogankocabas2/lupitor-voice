@@ -142,9 +142,9 @@ function VoicePanel({ keypad }: { keypad: boolean }) {
       <p className="voice-state" aria-live="polite" style={{ textAlign: "center" }}>{STATE_TEXT[state] ?? state}</p>
       {keypad && (
         <div style={{ marginTop: 8 }}>
-          <h3>Keypad</h3>
+          <h3>Code / PIN</h3>
           <p className="muted small">
-            When the agent asks for the last four digits of your Social Security number, type them here. They go straight to the verifier without entering LLM context.
+            When prompted by the agent, enter your 4-digit SSN or code here. Keypad input goes straight to the verifier without entering LLM context.
           </p>
 
           {/* Keypad Display Box */}
@@ -163,7 +163,7 @@ function VoicePanel({ keypad }: { keypad: boolean }) {
             }}
           >
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <span style={{ fontSize: 11, color: "var(--muted)", textTransform: "uppercase", letterSpacing: 0.5 }}>SSN:</span>
+              <span style={{ fontSize: 11, color: "var(--muted)", textTransform: "uppercase", letterSpacing: 0.5 }}>Code / PIN:</span>
               <span
                 style={{
                   fontFamily: "monospace",
@@ -191,7 +191,7 @@ function VoicePanel({ keypad }: { keypad: boolean }) {
 
           {entered.length >= 4 && (
             <div style={{ fontSize: 12, color: "var(--ok, #15803d)", marginBottom: 8, fontWeight: 500 }}>
-              ✓ {entered.length} digits entered (sent to verifier)
+              ✓ {entered.length} digits entered
             </div>
           )}
 
