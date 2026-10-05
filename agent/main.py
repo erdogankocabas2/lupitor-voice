@@ -132,7 +132,11 @@ async def entrypoint(ctx: JobContext):
         @ctx.room.on("data_received")
         def _on_data(packet: rtc.DataPacket):
             if packet.topic == "dtmf":
-                state.keypad.push(packet.data.decode(errors="ignore")[:1])
+                raw = packet.data.decode(errors="ignore").strip()
+                if raw.lower() == "clear":
+                    state.keypad.clear()
+                else:
+                    state.keypad.push(raw)
     else:
         agent = GenericAgent(cfg, sink, greet=greet_now)
 

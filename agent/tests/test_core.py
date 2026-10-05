@@ -200,3 +200,28 @@ def test_crisis_escalation():
     assert "988" in res.script
     assert tk.result.outcome == "escalated_crisis"
 
+
+@pytest.mark.anyio
+async def test_keypad_buffer_prebuffered_digits():
+    from core.keypad import KeypadBuffer
+    buf = KeypadBuffer()
+    # User types digits before collect() is called (during speech prompt)
+    buf.push("4")
+    buf.push("4")
+    buf.push("1")
+    buf.push("7")
+    collected = await buf.collect(4, timeout=1.0)
+    assert collected == "4417"
+
+
+@pytest.mark.anyio
+async def test_keypad_buffer_multi_digit_push_and_clear():
+    from core.keypad import KeypadBuffer
+    buf = KeypadBuffer()
+    buf.push("9999")
+    buf.clear()
+    buf.push("4417")
+    collected = await buf.collect(4, timeout=1.0)
+    assert collected == "4417"
+
+

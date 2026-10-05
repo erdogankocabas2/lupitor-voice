@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { BarVisualizer, LiveKitRoom, RoomAudioRenderer, useRoomContext, useVoiceAssistant } from "@livekit/components-react";
 import CallTimeline from "./CallTimeline";
 
@@ -94,19 +94,107 @@ export default function TestCall({ agentId, template, accounts }: { agentId: str
 function VoicePanel({ keypad }: { keypad: boolean }) {
   const { state, audioTrack } = useVoiceAssistant();
   const room = useRoomContext();
+  const [entered, setEntered] = useState<string>("");
 
-  function press(key: string) {
-    room.localParticipant.publishData(new TextEncoder().encode(key), { reliable: true, topic: "dtmf" });
-  }
+  const press = useCallback((key: string) => {
+    if (key === "clear") {
+      setEntered("");
+      room.localParticipant?.publishData(new TextEncoder().encode("clear"), { reliable: true, topic: "dtmf" });
+      return;
+    }
+    if (key === "#") {
+      room.localParticipant?.publishData(new TextEncoder().encode("#"), { reliable: true, topic: "dtmf" });
+      return;
+    }
+    if (/^[0-9*]$/.test(key)) {
+      setEntered((prev) => {
+        const next = (prev + key).slice(0, 8); // Keep up to 8 digits
+        room.localParticipant?.publishData(new TextEncoder().encode(key), { reliable: true, topic: "dtmf" });
+        return next;
+      });
+    }
+  }, [room]);
+
+  const clear = useCallback(() => {
+    press("clear");
+  }, [press]);
+
+  // Physical keyboard support for convenience
+  useEffect(() => {
+    if (!keypad) return;
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+      if (/^[0-9*#]$/.test(e.key)) {
+        e.preventDefault();
+        press(e.key);
+      } else if (e.key === "Backspace" || e.key === "Escape") {
+        e.preventDefault();
+        clear();
+      }
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [keypad, press, clear]);
 
   return (
     <>
       <BarVisualizer state={state} trackRef={audioTrack} barCount={7} />
       <p className="voice-state" aria-live="polite" style={{ textAlign: "center" }}>{STATE_TEXT[state] ?? state}</p>
       {keypad && (
-        <div>
+        <div style={{ marginTop: 8 }}>
           <h3>Keypad</h3>
-          <p className="muted small">When the agent asks for the last four digits of your Social Security number, type them here. They go to the verifier, not to the model.</p>
+          <p className="muted small">
+            When the agent asks for the last four digits of your Social Security number, type them here. They go straight to the verifier without entering LLM context.
+          </p>
+
+          {/* Keypad Display Box */}
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              padding: "8px 12px",
+              background: "var(--paper)",
+              borderRadius: "var(--radius-s)",
+              border: "1px solid var(--rule)",
+              marginTop: 10,
+              marginBottom: 8,
+              maxWidth: 220,
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <span style={{ fontSize: 11, color: "var(--muted)", textTransform: "uppercase", letterSpacing: 0.5 }}>SSN:</span>
+              <span
+                style={{
+                  fontFamily: "monospace",
+                  fontSize: 16,
+                  fontWeight: 600,
+                  letterSpacing: 4,
+                  color: entered.length > 0 ? "var(--ink)" : "var(--muted)",
+                }}
+              >
+                {entered.length > 0 ? entered : "____"}
+              </span>
+            </div>
+            {entered.length > 0 && (
+              <button
+                type="button"
+                className="btn ghost"
+                style={{ fontSize: 11, padding: "2px 6px", minHeight: "auto", height: 22 }}
+                onClick={clear}
+                title="Clear entered digits"
+              >
+                Clear
+              </button>
+            )}
+          </div>
+
+          {entered.length >= 4 && (
+            <div style={{ fontSize: 12, color: "var(--ok, #15803d)", marginBottom: 8, fontWeight: 500 }}>
+              ✓ {entered.length} digits entered (sent to verifier)
+            </div>
+          )}
+
           <div className="keypad">
             {["1", "2", "3", "4", "5", "6", "7", "8", "9", "*", "0", "#"].map((k) => (
               <button key={k} type="button" onClick={() => press(k)} aria-label={`Key ${k}`}>{k}</button>

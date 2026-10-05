@@ -19,41 +19,10 @@ from core import prompts
 from core.config import AgentConfig
 from core.db import EventSink
 from core.guard import ResponseGuard, SentenceBuffer
+from core.keypad import KeypadBuffer
 from core.toolkit import CollectionsToolkit, ToolResult
 
 log = logging.getLogger("collections")
-
-
-class KeypadBuffer:
-    """Collects DTMF digits (phone) or keypad data messages (browser test page).
-    Digits go straight to the verifier and never enter the LLM context."""
-
-    def __init__(self) -> None:
-        self._digits: list[str] = []
-        self._done = asyncio.Event()
-        self._active = False
-
-    def push(self, key: str) -> None:
-        if not self._active:
-            return
-        if key == "#":
-            self._done.set()
-        elif key.isdigit():
-            self._digits.append(key)
-            if len(self._digits) >= 4:
-                self._done.set()
-
-    async def collect(self, n: int = 4, timeout: float = 25.0) -> Optional[str]:
-        self._digits, self._active = [], True
-        self._done.clear()
-        try:
-            await asyncio.wait_for(self._done.wait(), timeout)
-        except asyncio.TimeoutError:
-            pass
-        finally:
-            self._active = False
-        value = "".join(self._digits[:n])
-        return value if len(value) == n else None
 
 
 @dataclass
